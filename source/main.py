@@ -13,7 +13,8 @@ class HanoiGame:
     PEG_TOP_Y = 45
 
     # アニメーション速度
-    ANIMATION_SPEED = 0.18
+    # 数値を大きくすると速くなる
+    ANIMATION_SPEED = 0.28
 
     def __init__(self):
         pyxel.init(self.WIDTH, self.HEIGHT, title="ハノイの塔")
@@ -24,8 +25,10 @@ class HanoiGame:
 
         self.pegs = []
 
-        # 輪を持っている状態
+        # 輪を持っているか
         self.dragging = False
+
+        # 持っている輪の情報
         self.drag_ring = None
         self.drag_from = None
         self.drag_target = None
@@ -111,7 +114,7 @@ class HanoiGame:
         if pyxel.btnp(pyxel.KEY_RIGHT) or pyxel.btnp(pyxel.KEY_PLUS):
             self.ring_count = min(8, self.ring_count + 1)
 
-        # 画面上のボタン
+        # マウス操作
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             x = pyxel.mouse_x
             y = pyxel.mouse_y
@@ -130,7 +133,7 @@ class HanoiGame:
 
     def update_game(self):
         # -------------------------
-        # 上部ボタン
+        # RESET / TITLE ボタン
         # -------------------------
 
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
@@ -148,8 +151,11 @@ class HanoiGame:
                 self.drag_ring = None
                 self.drag_from = None
                 self.drag_target = None
+
                 self.animating = False
                 self.anim_type = None
+                self.anim_t = 0
+
                 self.scene = "select"
                 return
 
@@ -158,6 +164,12 @@ class HanoiGame:
         # -------------------------
 
         if self.animating:
+            # 持ち上げ中にクリックを離した場合
+            if self.anim_type == "lift":
+                if not pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+                    self.cancel_lift()
+                    return
+
             self.update_animation()
             return
 
@@ -166,11 +178,11 @@ class HanoiGame:
         # -------------------------
 
         if not self.dragging:
+            # 棒をタップした瞬間
             if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 peg = self.get_peg_at_mouse()
 
-                # 棒の範囲をタップしたら、
-                # その棒の一番上の輪を持ち上げる
+                # 棒の範囲内なら、一番上の輪を持ち上げる
                 if peg is not None and len(self.pegs[peg]) > 0:
                     self.start_lift_animation(peg)
 
@@ -180,7 +192,7 @@ class HanoiGame:
         # 輪を持って移動中
         # -------------------------
 
-        # マウスに一番近い棒を探す
+        # マウスに一番近い棒を取得
         nearest_peg = self.get_nearest_peg()
 
         # 輪を一番近い棒の中央へスナップ
@@ -194,7 +206,7 @@ class HanoiGame:
                 self.start_drop_animation(nearest_peg)
 
             else:
-                # 置けない場合は瞬間的に元へ戻す
+                # 置けない場合は元の棒へ瞬間的に戻す
                 self.pegs[self.drag_from].append(self.drag_ring)
 
                 self.dragging = False
@@ -203,25 +215,25 @@ class HanoiGame:
                 self.drag_target = None
 
     # -------------------------
-    # アニメーション
+    # 持ち上げ・落下処理
     # -------------------------
 
     def start_lift_animation(self, peg):
-        """棒から輪を取り出して上へ持ち上げる"""
+        """棒から輪を取り出して、上へ持ち上げる"""
         self.dragging = True
         self.drag_from = peg
         self.drag_target = peg
 
-        # 一番上の輪を取り出す
+        # 棒の一番上の輪を取り出す
         self.drag_ring = self.pegs[peg].pop()
 
         self.drag_x = self.PEG_X[peg]
 
-        # 輪が置かれていた位置
+        # 輪が置かれていた高さ
         start_level = len(self.pegs[peg])
         self.drag_y = self.get_ring_y(start_level)
 
-        # 上へ持ち上げる
+        # 上へ移動
         self.anim_start_y = self.drag_y
         self.anim_end_y = 25
         self.anim_t = 0
@@ -229,12 +241,29 @@ class HanoiGame:
         self.anim_type = "lift"
         self.animating = True
 
+    def cancel_lift(self):
+        """
+        持ち上げ中にクリックを離した場合、
+        輪を元の棒へ瞬間的に戻す
+        """
+        if self.drag_from is not None and self.drag_ring is not None:
+            self.pegs[self.drag_from].append(self.drag_ring)
+
+        self.dragging = False
+        self.drag_ring = None
+        self.drag_from = None
+        self.drag_target = None
+
+        self.animating = False
+        self.anim_type = None
+        self.anim_t = 0
+
     def start_drop_animation(self, peg):
         """目的の棒へ輪を落とす"""
         self.drag_target = peg
         self.drag_x = self.PEG_X[peg]
 
-        # 輪を置く位置
+        # 輪を置く高さ
         target_level = len(self.pegs[peg])
         target_y = self.get_ring_y(target_level)
 
@@ -275,7 +304,7 @@ class HanoiGame:
 
             return
 
-        # なめらかなイージング
+        # なめらかに動かす
         t = self.ease_out(self.anim_t)
 
         self.drag_y = (
@@ -380,7 +409,7 @@ class HanoiGame:
 
     def draw_game(self):
         pyxel.text(8, 8, f"MOVES: {self.moves}", 7)
-        pyxel.text(8, 20, "CLICK PEG, THEN RELEASE", 6)
+        pyxel.text(8, 20, "HOLD PEG, MOVE, RELEASE", 6)
 
         # RESETボタン
         pyxel.rect(145, 5, 45, 14, 10)
