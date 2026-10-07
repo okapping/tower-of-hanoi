@@ -409,7 +409,7 @@ class HanoiGame:
 
     def draw_game(self):
         pyxel.text(8, 8, f"MOVES: {self.moves}", 7)
-        pyxel.text(8, 20, "HOLD PEG, MOVE, RELEASE", 6)
+        # pyxel.text(8, 20, "HOLD PEG, MOVE, RELEASE", 6)
 
         # RESETボタン
         pyxel.rect(145, 5, 45, 14, 10)
@@ -454,6 +454,9 @@ class HanoiGame:
                 self.drag_ring
             )
 
+        # 小さい輪から大きい輪への色見本
+        self.draw_ring_legend()
+
     def draw_ring(self, x, y, ring):
         # 輪が大きいほど横幅を広くする
         width = 12 + ring * 7
@@ -478,6 +481,39 @@ class HanoiGame:
             height,
             7
         )
+
+    def draw_ring_legend(self):
+        """画面左端に、小さい輪から大きい輪まで縦に表示する"""
+        x = 3
+        square_size = 7
+        gap = 2
+
+        # 上から小さい順、下にいくほど大きい輪
+        start_y = 70
+
+        for index, ring in enumerate(
+            range(1, self.ring_count + 1)
+        ):
+            y = start_y + index * (square_size + gap)
+
+            color = 2 + (ring % 12)
+
+            # 大きさが均一の四角
+            pyxel.rect(
+                x,
+                y,
+                square_size,
+                square_size,
+                color
+            )
+
+            pyxel.rectb(
+                x,
+                y,
+                square_size,
+                square_size,
+                7
+            )
 
     def draw_clear(self):
         pyxel.rect(35, 65, 170, 55, 0)
