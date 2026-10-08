@@ -13,7 +13,6 @@ class HanoiGame:
     PEG_TOP_Y = 45
 
     # アニメーション速度
-    # 数値を大きくすると速くなる
     ANIMATION_SPEED = 0.28
 
     def __init__(self):
@@ -23,26 +22,28 @@ class HanoiGame:
         self.scene = "select"
         self.ring_count = 4
 
+        # 各棒に置かれている輪
         self.pegs = []
 
-        # 輪を持っているか
+        # 輪を持っている状態
         self.dragging = False
-
-        # 持っている輪の情報
         self.drag_ring = None
         self.drag_from = None
         self.drag_target = None
 
-        # 移動中の輪の座標
+        # 持っている輪の座標
         self.drag_x = 0
         self.drag_y = 0
 
-        # アニメーション用
+        # 持ち上げアニメーション用
         self.animating = False
         self.anim_type = None
         self.anim_start_y = 0
         self.anim_end_y = 0
         self.anim_t = 0
+
+        # 落下中の輪
+        self.falling_rings = []
 
         self.moves = 0
 
@@ -70,6 +71,8 @@ class HanoiGame:
         self.anim_type = None
         self.anim_t = 0
 
+        self.falling_rings = []
+
         self.scene = "game"
 
     def reset_game(self):
@@ -90,6 +93,8 @@ class HanoiGame:
         self.animating = False
         self.anim_type = None
         self.anim_t = 0
+
+        self.falling_rings = []
 
     # -------------------------
     # 更新処理
@@ -114,7 +119,7 @@ class HanoiGame:
         if pyxel.btnp(pyxel.KEY_RIGHT) or pyxel.btnp(pyxel.KEY_PLUS):
             self.ring_count = min(8, self.ring_count + 1)
 
-        # マウス操作
+        # マウスで輪の数を変更・ゲーム開始
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             x = pyxel.mouse_x
             y = pyxel.mouse_y
@@ -156,33 +161,36 @@ class HanoiGame:
                 self.anim_type = None
                 self.anim_t = 0
 
+                self.falling_rings = []
                 self.scene = "select"
                 return
 
+        # 落下中の輪は、ほかの操作と同時に更新する
+        self.update_falling_rings()
+
         # -------------------------
-        # アニメーション中
+        # 持ち上げアニメーション中
         # -------------------------
 
         if self.animating:
-            # 持ち上げ中にクリックを離した場合
+            # 持ち上げ中に指を離したら元の場所へ戻す
             if self.anim_type == "lift":
                 if not pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
                     self.cancel_lift()
                     return
 
-            self.update_animation()
-            return
+                self.update_animation()
+                return
 
         # -------------------------
         # 輪を持っていない状態
         # -------------------------
 
         if not self.dragging:
-            # 棒をタップした瞬間
             if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 peg = self.get_peg_at_mouse()
 
-                # 棒の範囲内なら、一番上の輪を持ち上げる
+                # 棒の一番上の輪を持ち上げる
                 if peg is not None and len(self.pegs[peg]) > 0:
                     self.start_lift_animation(peg)
 
@@ -204,7 +212,6 @@ class HanoiGame:
             if self.can_put(nearest_peg, self.drag_ring):
                 # 置ける場合は落下アニメーション
                 self.start_drop_animation(nearest_peg)
-
             else:
                 # 置けない場合は元の棒へ瞬間的に戻す
                 self.pegs[self.drag_from].append(self.drag_ring)
@@ -215,11 +222,11 @@ class HanoiGame:
                 self.drag_target = None
 
     # -------------------------
-    # 持ち上げ・落下処理
+    # 輪を持ち上げる処理
     # -------------------------
 
     def start_lift_animation(self, peg):
-        """棒から輪を取り出して、上へ持ち上げる"""
+        """棒から一番上の輪を取り出して持ち上げる"""
         self.dragging = True
         self.drag_from = peg
         self.drag_target = peg
@@ -229,11 +236,11 @@ class HanoiGame:
 
         self.drag_x = self.PEG_X[peg]
 
-        # 輪が置かれていた高さ
+        # 輪が置かれていた位置
         start_level = len(self.pegs[peg])
         self.drag_y = self.get_ring_y(start_level)
 
-        # 上へ移動
+        # 上へ持ち上げる
         self.anim_start_y = self.drag_y
         self.anim_end_y = 25
         self.anim_t = 0
@@ -242,10 +249,7 @@ class HanoiGame:
         self.animating = True
 
     def cancel_lift(self):
-        """
-        持ち上げ中にクリックを離した場合、
-        輪を元の棒へ瞬間的に戻す
-        """
+        """持ち上げ中に指を離した場合、元の棒へ戻す"""
         if self.drag_from is not None and self.drag_ring is not None:
             self.pegs[self.drag_from].append(self.drag_ring)
 
@@ -258,8 +262,15 @@ class HanoiGame:
         self.anim_type = None
         self.anim_t = 0
 
+    # -------------------------
+    # 輪を落とす処理
+    # -------------------------
+
     def start_drop_animation(self, peg):
-        """目的の棒へ輪を落とす"""
+        """
+        目的の棒へ輪を落とす。
+        落下中も別の輪を操作できるようにする。
+        """
         self.drag_target = peg
         self.drag_x = self.PEG_X[peg]
 
@@ -267,14 +278,71 @@ class HanoiGame:
         target_level = len(self.pegs[peg])
         target_y = self.get_ring_y(target_level)
 
-        self.anim_start_y = self.drag_y
-        self.anim_end_y = target_y
-        self.anim_t = 0
+        # 論理上は先に棒へ入れておく
+        # これにより次の操作の判定が可能になる
+        self.pegs[peg].append(self.drag_ring)
 
-        self.anim_type = "drop"
-        self.animating = True
+        # 落下中の輪として登録
+        self.falling_rings.append({
+            "ring": self.drag_ring,
+            "peg": peg,
+            "x": self.PEG_X[peg],
+            "y": self.drag_y,
+            "start_y": self.drag_y,
+            "target_y": target_y,
+            "t": 0
+        })
+
+        self.moves += 1
+
+        # 現在の操作を終了
+        self.dragging = False
+        self.drag_ring = None
+        self.drag_from = None
+        self.drag_target = None
+
+        # 右端の棒にすべて移動したらクリア
+        # if self.pegs[2] == list(range(self.ring_count, 0, -1)):
+        #     self.scene = "clear"
+        
+    def update_falling_rings(self):
+        """落下中の輪を更新する"""
+        finished = []
+    
+        for falling in self.falling_rings:
+            falling["t"] += self.ANIMATION_SPEED
+    
+            if falling["t"] >= 1:
+                falling["t"] = 1
+                falling["y"] = falling["target_y"]
+                finished.append(falling)
+    
+            else:
+                t = self.ease_out(falling["t"])
+    
+                falling["y"] = (
+                    falling["start_y"]
+                    + (
+                        falling["target_y"]
+                        - falling["start_y"]
+                    ) * t
+                )
+    
+        # 落下完了した輪を一覧から削除
+        for falling in finished:
+            if falling in self.falling_rings:
+                self.falling_rings.remove(falling)
+    
+        # まだ落下中の輪がある場合は、クリア判定しない
+        if self.falling_rings:
+            return
+    
+        # すべての輪が右端にあり、落下も完全に終わった場合だけクリア
+        if self.pegs[2] == list(range(self.ring_count, 0, -1)):
+            self.scene = "clear"
 
     def update_animation(self):
+        """持ち上げアニメーションを更新する"""
         self.anim_t += self.ANIMATION_SPEED
 
         if self.anim_t >= 1:
@@ -287,21 +355,6 @@ class HanoiGame:
                 self.drag_y = 25
                 self.anim_type = None
 
-            # 落下完了
-            elif self.anim_type == "drop":
-                self.pegs[self.drag_target].append(self.drag_ring)
-                self.moves += 1
-
-                # 右端の棒にすべて移動したらクリア
-                if self.pegs[2] == list(range(self.ring_count, 0, -1)):
-                    self.scene = "clear"
-
-                self.dragging = False
-                self.drag_ring = None
-                self.drag_from = None
-                self.drag_target = None
-                self.anim_type = None
-
             return
 
         # なめらかに動かす
@@ -309,7 +362,10 @@ class HanoiGame:
 
         self.drag_y = (
             self.anim_start_y
-            + (self.anim_end_y - self.anim_start_y) * t
+            + (
+                self.anim_end_y
+                - self.anim_start_y
+            ) * t
         )
 
     def ease_out(self, t):
@@ -329,6 +385,10 @@ class HanoiGame:
         mouse_y = pyxel.mouse_y
 
         for i, peg_x in enumerate(self.PEG_X):
+            # 落下中の輪がある棒は操作しない
+            if self.has_falling_ring_on_peg(i):
+                continue
+
             # 棒の左右28ピクセル以内
             if abs(mouse_x - peg_x) <= 28:
 
@@ -349,8 +409,20 @@ class HanoiGame:
 
         return distances.index(min(distances))
 
+    def has_falling_ring_on_peg(self, peg):
+        """その棒に落下中の輪があるか調べる"""
+        for falling in self.falling_rings:
+            if falling["peg"] == peg:
+                return True
+
+        return False
+
     def can_put(self, peg, ring):
         """その棒に輪を置けるか判定"""
+        # 落下中の輪がある棒には置けない
+        if self.has_falling_ring_on_peg(peg):
+            return False
+
         # 空の棒には置ける
         if not self.pegs[peg]:
             return True
@@ -363,10 +435,7 @@ class HanoiGame:
     # -------------------------
 
     def get_ring_y(self, level):
-        """
-        棒の下から何段目かを、
-        画面上の y 座標に変換する
-        """
+        """輪の段数を画面上の y 座標へ変換する"""
         return self.FLOOR_Y - 7 - level * 9
 
     # -------------------------
@@ -409,7 +478,6 @@ class HanoiGame:
 
     def draw_game(self):
         pyxel.text(8, 8, f"MOVES: {self.moves}", 7)
-        # pyxel.text(8, 20, "HOLD PEG, MOVE, RELEASE", 6)
 
         # RESETボタン
         pyxel.rect(145, 5, 45, 14, 10)
@@ -440,13 +508,21 @@ class HanoiGame:
 
         # 棒に置かれている輪
         for peg_index, rings in enumerate(self.pegs):
-            for level, ring in enumerate(rings):
+            visible_rings = list(rings)
+
+            # 落下中の輪は、棒側の描画から一時的に除外する
+            for falling in self.falling_rings:
+                if falling["peg"] == peg_index:
+                    if falling["ring"] in visible_rings:
+                        visible_rings.remove(falling["ring"])
+
+            for level, ring in enumerate(visible_rings):
                 x = self.PEG_X[peg_index]
                 y = self.get_ring_y(level)
 
                 self.draw_ring(x, y, ring)
 
-        # 移動中の輪
+        # 持って移動中の輪
         if self.dragging:
             self.draw_ring(
                 self.drag_x,
@@ -454,11 +530,19 @@ class HanoiGame:
                 self.drag_ring
             )
 
-        # 小さい輪から大きい輪への色見本
+        # 落下中の輪
+        for falling in self.falling_rings:
+            self.draw_ring(
+                falling["x"],
+                int(falling["y"]),
+                falling["ring"]
+            )
+
+        # 左端の色見本
         self.draw_ring_legend()
 
     def draw_ring(self, x, y, ring):
-        # 輪が大きいほど横幅を広くする
+        """通常の輪を描画する"""
         width = 12 + ring * 7
         height = 7
 
@@ -483,19 +567,19 @@ class HanoiGame:
         )
 
     def draw_ring_legend(self):
-        """画面左端に、小さい輪から大きい輪まで縦に表示する"""
+        """
+        画面左端に色見本を表示する。
+        上が小さい輪、下が大きい輪。
+        """
         x = 3
+        start_y = 70
         square_size = 7
         gap = 2
-
-        # 上から小さい順、下にいくほど大きい輪
-        start_y = 70
 
         for index, ring in enumerate(
             range(1, self.ring_count + 1)
         ):
             y = start_y + index * (square_size + gap)
-
             color = 2 + (ring % 12)
 
             # 大きさが均一の四角
