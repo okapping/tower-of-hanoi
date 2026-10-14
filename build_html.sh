@@ -22,6 +22,8 @@ mv source.html.tmp source.html
 mkdir -p docs
 mv source.html ./docs/index.html
 mv source.pyxapp ./docs/source.pyxapp
+# アナリティクス設定
+printf '%s\n' '<script defer src="https://cloud.umami.is/script.js" data-website-id="a4d8746d-447a-4b50-b34e-f4a0542360c5"></script>' >> ./docs/index.html
 
 # distのクリーンアップ
 # rm -rf ./dist/*
