@@ -293,7 +293,9 @@ class HanoiGame:
             "t": 0
         })
 
-        self.moves += 1
+        # 違う棒へ移動した場合だけ手数を加算
+        if peg != self.drag_from:
+            self.moves += 1
 
         # 現在の操作を終了
         self.dragging = False
@@ -506,6 +508,8 @@ class HanoiGame:
                 13
             )
 
+        self.draw_peg_selection_areas()
+
         # 棒に置かれている輪
         for peg_index, rings in enumerate(self.pegs):
             visible_rings = list(rings)
@@ -540,6 +544,45 @@ class HanoiGame:
 
         # 左端の色見本
         self.draw_ring_legend()
+
+    def draw_peg_selection_areas(self):
+        """棒を選択できる範囲を枠で表示する"""
+
+        mouse_x = pyxel.mouse_x
+        mouse_y = pyxel.mouse_y
+
+        for peg_index, peg_x in enumerate(self.PEG_X):
+            left = peg_x - 28
+            top = self.PEG_TOP_Y - 10
+            width = 57
+            height = self.FLOOR_Y + 8 - top
+
+            # マウスがこの棒の選択範囲にあるか
+            is_hover = (
+                abs(mouse_x - peg_x) <= 28
+                and self.PEG_TOP_Y - 10 <= mouse_y <= self.FLOOR_Y + 8
+            )
+
+            # 落下中の輪がある棒は選択不可
+            is_available = not self.has_falling_ring_on_peg(peg_index)
+
+            if is_hover and is_available:
+                # ホバー中は明るい色
+                color = 6
+            elif is_available:
+                # 通常時の選択範囲
+                color = 5
+            else:
+                # 選択できない棒
+                color = 8
+
+            pyxel.rectb(
+                left,
+                top,
+                width,
+                height,
+                color
+            )
 
     def draw_ring(self, x, y, ring):
         """通常の輪を描画する"""
